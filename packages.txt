@@ -1,0 +1,2 @@
+# This gives you c++, g++, make, etc., inside the image because weaviate client pulls in grpcio-tools
+build-essential
