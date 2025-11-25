@@ -2,11 +2,12 @@ import streamlit as st
 from openai import OpenAI
 import weaviate
 import os
+import re
 
-WEAVIATE_CLASS_NAME = os.getenv("WEAVIATE_CLASS_NAME")
+WEAVIATE_COLLECTION_NAME = os.getenv("WEAVIATE_COLLECTION_NAME")
 
 
-def get_relevant_chunks(user_prompt, limit=5, certainty=0.75):
+def get_relevant_chunks(user_prompt, limit=5, max_distance=0.75):
     import weaviate.classes as wvc
 
     client = weaviate.connect_to_local(
@@ -18,11 +19,11 @@ def get_relevant_chunks(user_prompt, limit=5, certainty=0.75):
     )
 
     try:
-        source = client.collections.get(WEAVIATE_CLASS_NAME)
+        source = client.collections.get(WEAVIATE_COLLECTION_NAME)
 
         response = source.query.near_text(
             query=user_prompt,
-            distance=certainty,
+            distance=max_distance,
             return_metadata=wvc.query.MetadataQuery(distance=True),
             limit=limit,
         )
@@ -30,6 +31,7 @@ def get_relevant_chunks(user_prompt, limit=5, certainty=0.75):
     finally:
         client.close()
 
+    print("Weaviate query response:", response)
     return response.objects
 
 
@@ -38,12 +40,13 @@ def get_response(chunks, user_prompt):
     about Apache Airflow and the topic requested by the user:"""
 
     for chunk in chunks:
-        chunk = chunk.properties
-        chunk_title = chunk["folder_path"] if chunk["folder_path"] else "unknown"
+        props = chunk.properties
+        # print("CHUNK PROPS:", props)
 
-        chunk_full_text = chunk["full_text"] if chunk["full_text"] else "no text"
+        folder_path = props.get("folder_path") or "unknown"
+        text = props.get("full_text") or props.get("text") or "no text"
 
-        chunk_info = chunk_title + " Full text: " + chunk_full_text
+        chunk_info = folder_path + " Full text: " + text
         inference_prompt += " " + chunk_info + " "
 
     inference_prompt += "Your user asks:"
@@ -78,12 +81,12 @@ user_prompt = st.text_input(
     "Create a LinkedIn post for me about dynamic task mapping!",
 )
 limit = st.slider("Retrieve X most relevant chunks:", 1, 20, 5)
-certainty = st.slider("Certainty threshold for relevancy", 0.0, 1.0, 0.75)
+max_distance = st.slider("max_distance threshold for relevancy", 0.0, 1.0, 0.75)
 
 if st.button("Generate post!"):
     st.header("Answer")
     with st.spinner(text="Thinking... :thinking_face:"):
-        chunks = get_relevant_chunks(user_prompt, limit=limit, certainty=certainty)
+        chunks = get_relevant_chunks(user_prompt, limit=limit, max_distance=max_distance)
         response = get_response(chunks=chunks, user_prompt=user_prompt)
 
         st.success("Done! :smile:")
@@ -93,6 +96,21 @@ if st.button("Generate post!"):
         st.header("Sources")
 
         for chunk in chunks:
-            st.write(f"URI: {chunk.properties['uri']}")
-            st.write(f"Chunk number: {int(chunk.properties['chunk_index'])}")
+            props = chunk.properties
+            print("CHUNK PROPS:", props)  # to docker logs
+            # st.write("Raw props:", props)
+
+            title = props.get("title", "unknown title")
+            folder_path = props.get("folder_path", "unknown folder")
+            # raw_text = props.get("full_text") or props.get("text") or ""
+            # clean_text = _clean_markdown_text(raw_text)
+            # text_snippet = clean_text[:200]
+            uuid = str(chunk.uuid)
+            distance = getattr(chunk.metadata, "distance", None)
+
+            st.write(f"Title: {title}")
+            st.write(f"Folder: {folder_path}")
+            st.write(f"UUID: {uuid}")
+            st.write(f"Distance: {distance}")
+            # st.write(f"Text snippet: {text_snippet}...")
             st.write("---")
