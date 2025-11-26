@@ -1,3 +1,6 @@
 streamlit==1.33.0
 weaviate-client==4.5.5
-openai==1.19.0
+openai==2.8.1
+langchain==1.0.8
+langsmith==0.4.47
+langchain-openai==1.1.0

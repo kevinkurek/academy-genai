@@ -1,8 +1,9 @@
 import streamlit as st
-from openai import OpenAI
+# from openai import OpenAI # used for direct OpenAI client calls
 import weaviate
 import os
-import re
+from langchain_openai import ChatOpenAI # LangChain OpenAI wrapper
+from langchain_core.messages import HumanMessage
 
 WEAVIATE_COLLECTION_NAME = os.getenv("WEAVIATE_COLLECTION_NAME")
 
@@ -56,16 +57,18 @@ def get_response(chunks, user_prompt):
     inference_prompt += """ 
     Remember to keep the post short and sweet! At the end of the post add another sentence that is a space fact!"""
 
-    client = OpenAI()
+    # Direct OpenAI client – commented out in favor of LangChain LLM
+    # client = OpenAI()
 
-    champion_model_id = "gpt-4"
-
-    chat_completion = client.chat.completions.create(
-        model=champion_model_id,
-        messages=[{"role": "user", "content": inference_prompt}],
+    # LangChain LLM – this is what LangSmith will trace
+    llm = ChatOpenAI(
+        model="gpt-4o-mini",  # or "gpt-4o", etc.
+        temperature=0.7,
     )
 
-    return chat_completion
+    # Call with a simple message list; traced automatically when LANGCHAIN_TRACING_V2=true
+    response = llm.invoke([HumanMessage(content=inference_prompt)])
+    return response
 
 
 # ------------------ #
@@ -91,7 +94,11 @@ if st.button("Generate post!"):
 
         st.success("Done! :smile:")
 
-        st.write(response.choices[0].message.content)
+        # Direct OpenAI client – commented out in favor of LangChain LLM
+        # st.write(response.choices[0].message.content)
+
+        # response is a LangChain Message now, not raw OpenAI client
+        st.write(response.content)
 
         st.header("Sources")
 
